@@ -1,0 +1,114 @@
+IaaC(FOR VPC, SUBNET, IG, RT, SG, EC2_INSTANCE)
+
+provider "aws" {
+  region     = "us-east-2"
+  access_key = "Enter_Your_Access_Key_Here"
+  secret_key = "Enter_Your_Secret_key_Here"
+}
+
+
+
+# create a vpc
+resource "aws_vpc" "Production" {
+  cidr_block       = "10.0.0.0/16"
+  instance_tenancy = "default"
+
+  tags = {
+    Name = "Production_vpc"
+  }
+}
+
+# create a subnet
+resource "aws_subnet" "Production" {
+  vpc_id     = aws_vpc.Production.id
+  cidr_block = "10.0.1.0/24"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "Prod.subnet"
+  }
+}
+
+# create Igw
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.Production.id
+
+  tags = {
+    Name = "Prod.Igw"
+  }
+}
+# create route table
+resource "aws_route_table" "Prod" {
+  vpc_id = aws_vpc.Production.id
+
+  route {
+    cidr_block           = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
+
+  tags = {
+    Name = "Prod.rt"
+  }
+}
+
+# associate the subnet to the rt
+resource "aws_route_table_association" "Prod_sub_association" {
+  subnet_id      = aws_subnet.Production.id
+  route_table_id = aws_route_table.Prod.id
+}
+# create sg
+resource "aws_security_group" "allow_tls" {
+  name        = "sg"
+  description = "Allow TLS inbound traffic and all outbound traffic"
+  vpc_id      = aws_vpc.Production.id
+
+
+  ingress {
+    description = "traffic through http"
+    from_port        = 80
+    to_port          = 80
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "traffic through https"
+    from_port        = 443
+    to_port          = 443
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+}
+
+ingress {
+    description = "traffic through ssh"
+    from_port        = 22
+    to_port          = 22
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+}
+
+egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1" #any IP or any protocol
+    cidr_blocks      = ["0.0.0.0/0"]
+  
+  }
+
+  tags = {
+    Name = "SG_allow_tls"
+  }
+}
+
+# create an instance and attched the sg
+resource "aws_instance" "Lagos_server" {
+  ami           = "ami-0ddda618e961f2270"
+  instance_type = "t2.micro"
+  vpc_security_group_ids = [aws_security_group.allow_tls.id]
+  subnet_id = aws_subnet.Production.id
+  key_name   = "mayor_key.pair"
+  
+  tags = {
+    Name = "Lagos_Server"
+  }
+}
